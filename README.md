@@ -242,7 +242,6 @@ go vet ./...
 
 ## 文档
 
-- [PRD.md](./PRD.md)：产品目标、系统边界和验收标准。
 - [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md)：完整企业实施规划。
 - [TECHNICAL_DESIGN.md](./TECHNICAL_DESIGN.md)：Go + PostgreSQL Demo 技术设计，已统一为“2xx 成功、可重试失败退避、重试耗尽进入死信”。
 - [AI_USAGE.md](./AI_USAGE.md)：本项目的 AI 使用说明。
