@@ -1,0 +1,99 @@
+server:
+  address: ":8080"
+  max_body_bytes: 1048576
+  ops_api_key_env: NOTIFYHUB_OPS_KEY
+
+worker:
+  poll_interval_ms: 500
+  batch_size: 50
+  lease_seconds: 60
+  max_attempts: 7
+  retry_delays: ["1m", "5m", "30m", "2h", "6h", "24h"]
+
+# Development-only switches for cmd/mockvendor on localhost.
+# Production configuration must set both values to false.
+security:
+  allow_insecure_http: true
+  allow_private_network: true
+
+sources:
+  - id: order-service
+    api_key_env: ORDER_SERVICE_API_KEY
+
+events:
+  - id: commerce.order.paid.v1
+    source: order-service
+    schema: schemas/commerce.order.paid.v1.json
+    require_route: true
+
+external_systems:
+  - id: inventory-system
+    base_url: http://127.0.0.1:9090
+    max_concurrency: 4
+    rate_limit_per_second: 20
+  - id: crm-system
+    base_url: http://127.0.0.1:9090
+    max_concurrency: 2
+    rate_limit_per_second: 10
+
+api_operations:
+  - id: inventory.adjust-stock.v1
+    revision: 1
+    external_system: inventory-system
+    method: POST
+    path: /inventory/adjustments
+    static_headers:
+      Content-Type: application/json
+      Accept: application/json
+    allowed_route_headers: [X-Event-ID, X-Correlation-ID]
+    idempotency_header: Idempotency-Key
+    request_timeout_ms: 3000
+
+  - id: crm.create-order.v1
+    revision: 1
+    external_system: crm-system
+    method: POST
+    path: /crm/orders
+    static_headers:
+      Content-Type: application/json
+      Accept: application/json
+    allowed_route_headers: [X-Event-ID, X-Source-System]
+    idempotency_header: X-Request-ID
+    request_timeout_ms: 3000
+
+event_routes:
+  - id: order-paid-to-inventory
+    revision: 1
+    event_type: commerce.order.paid.v1
+    routing_key: default
+    api_operation: inventory.adjust-stock.v1
+    header_templates:
+      X-Event-ID: "{{ .event_id }}"
+      X-Correlation-ID: "{{ .event_id }}"
+    body_encoding: application/json
+    body_template: |
+      {
+        "request_id": {{ json .event_id }},
+        "sku": {{ json .payload.sku }},
+        "quantity_delta": {{ .payload.quantity | negate }}
+      }
+    enabled: true
+
+  - id: order-paid-to-crm
+    revision: 1
+    event_type: commerce.order.paid.v1
+    routing_key: default
+    api_operation: crm.create-order.v1
+    header_templates:
+      X-Event-ID: "{{ .event_id }}"
+      X-Source-System: "order-service"
+    body_encoding: application/json
+    body_template: |
+      {
+        "orderId": {{ json .payload.order_id }},
+        "customerId": {{ json .payload.customer_id }},
+        "paidAt": {{ json .occurred_at }},
+        "amount": {{ .payload.amount }},
+        "currency": {{ json .payload.currency }}
+      }
+    enabled: true

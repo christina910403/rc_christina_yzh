@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: notifyhub
+      POSTGRES_PASSWORD: notifyhub
+      POSTGRES_DB: notifyhub
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notifyhub"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    volumes:
+      - notifyhub-postgres:/var/lib/postgresql/data
+
+volumes:
+  notifyhub-postgres:
